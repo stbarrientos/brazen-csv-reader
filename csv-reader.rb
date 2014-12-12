@@ -1,4 +1,5 @@
 require 'csv'
+require 'fileutils'
 
 # Values for the strings from the csv file
 rank_values = {
@@ -127,7 +128,7 @@ applicant_array = []
 
 # Create a folder for the csv files to be zipped later
 target_dir = "headers-2014-12-12"
-system("mkdir #{target_dir}")
+FileUtils.mkdir target_dir
 # Go throught every row of the csv file
 CSV.foreach("../corporate-gray-moaa-6-20141211-204645.csv") do |row|
 
