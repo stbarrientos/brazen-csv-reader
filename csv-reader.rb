@@ -8,73 +8,6 @@ opts = Trollop::options do
   opt :destination, "path/to/destination/folder", type: :string, default: "headers-2014-12-12"
 end
 
-# Hash to convert from string representation to integer representation for rank from the csv file
-rank_values = {
-  "E1" => 3,
-  "E2" => 22,
-  "E3" => 23,
-  "E4" => 24,
-  "E5" => 25,
-  "E6" => 26,
-  "E7" => 27,
-  "E8" => 28,
-  "E9" => 29,
-  "W1" => 16,
-  "W2" => 31,
-  "W3" => 32,
-  "W4" => 33,
-  "W5" => 34,
-  "O1" => 13,
-  "O2" => 5,
-  "O3" => 6,
-  "O4" => 7,
-  "O5" => 8,
-  "O6" => 9,
-  "O7" => 10,
-  "O8" => 12,
-  "O9" => 11,
-  "010" => 35,
-  "Civilian" => 37
-}
-
-# Hash to convert branch strings to branch integers
-branch_values = {
-  nil => 0,
-  "Unspecified" => 0,
-  "Army" => 1,
-  "Navy" => 2,
-  "Air Force" => 3,
-  "Marine Corps" => 4,
-  "Coast Guard" => 5,
-  "Army Reserve" => 6,
-  "Navy Reserve" => 7,
-  "Air Force Reserve" => 8,
-  "Marine Corps Reserve" => 9,
-  "Army National Guard" => 10,
-  "Coast Guard Reserve" => 12,
-  "Air National Guard" => 13,
-  "Other" => 14
-}
-
-# Hash to convert clearance strings to integers
-clearance_values = {
-  nil => 0,
-  "Unspecified" => 0,
-  "Secret" => 1,
-  "Top Secret" => 2,
-  "None" => 3
-}
-
-# Hash to convert education strings to integers
-education_values = {
-  nil => 0,
-  "Unspecified" => 0,
-  "High School or GED" => 1,
-  "Associates Degree" => 3,
-  "Bachelors Degree" => 4,
-  "Masters Degree" => 4,
-  "PhD" => 4
-}
 
 # Object to store all of the information for each applicant
 class Applicant
@@ -131,43 +64,111 @@ class Applicant
 
 end
 
+def write_files(source, destination)
+  
+  # Hash to convert from string representation to integer representation for rank from the csv file
+  rank_values = {
+    "E1" => 3,
+    "E2" => 22,
+    "E3" => 23,
+    "E4" => 24,
+    "E5" => 25,
+    "E6" => 26,
+    "E7" => 27,
+    "E8" => 28,
+    "E9" => 29,
+    "W1" => 16,
+    "W2" => 31,
+    "W3" => 32,
+    "W4" => 33,
+    "W5" => 34,
+    "O1" => 13,
+    "O2" => 5,
+    "O3" => 6,
+    "O4" => 7,
+    "O5" => 8,
+    "O6" => 9,
+    "O7" => 10,
+    "O8" => 12,
+    "O9" => 11,
+    "010" => 35,
+    "Civilian" => 37
+  }
+
+  # Hash to convert branch strings to branch integers
+  branch_values = {
+    nil => 0,
+    "Unspecified" => 0,
+    "Army" => 1,
+    "Navy" => 2,
+    "Air Force" => 3,
+    "Marine Corps" => 4,
+    "Coast Guard" => 5,
+    "Army Reserve" => 6,
+    "Navy Reserve" => 7,
+    "Air Force Reserve" => 8,
+    "Marine Corps Reserve" => 9,
+    "Army National Guard" => 10,
+    "Coast Guard Reserve" => 12,
+    "Air National Guard" => 13,
+    "Other" => 14
+  }
+
+  # Hash to convert clearance strings to integers
+  clearance_values = {
+    nil => 0,
+    "Unspecified" => 0,
+    "Secret" => 1,
+    "Top Secret" => 2,
+    "None" => 3
+  }
+
+  # Hash to convert education strings to integers
+  education_values = {
+    nil => 0,
+    "Unspecified" => 0,
+    "High School or GED" => 1,
+    "Associates Degree" => 3,
+    "Bachelors Degree" => 4,
+    "Masters Degree" => 4,
+    "PhD" => 4
+  }
+  # Go throught every row of the csv file
+  CSV.foreach(source) do |row|
+
+    # Store every column value of a row in an Application instance
+    app = Applicant.new(
+      row[0], # First name
+      row[1], # Last name
+      row[2], # Email
+      row[11], # Street Address
+      row[12], # City
+      row[13], # State Province
+      row[14], # Zipcode
+      branch_values[row[17]], # Military Branch
+      rank_values[row[18]], # Military Rank
+      row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
+      row[22], # Date Available
+      education_values[row[23]], # Education Level
+      clearance_values[row[25]], # Clearance
+      row[27], # Resume
+    )
+
+    # Write a new file and pass the csv contents to it
+    new_file = File.open("#{destination}/#{app.file_name}", "w")
+    new_file.write app.create_file_string
+    new_file.close
+  end
+    puts "#{Applicant.count} files successfully created"
+end
 begin
   FileUtils.mkdir opts[:destination]
+  write_files(opts[:source], opts[:destination])
 rescue
   puts "Folder #{opts[:destination]} already exists, continue? (y/n)"
   continue = gets.chomp
   if continue == "y"
-
-    # Go throught every row of the csv file
-    CSV.foreach(opts[:source]) do |row|
-
-      # Store every column value of a row in an Application instance
-      app = Applicant.new(
-        row[0], # First name
-        row[1], # Last name
-        row[2], # Email
-        row[11], # Street Address
-        row[12], # City
-        row[13], # State Province
-        row[14], # Zipcode
-        branch_values[row[17]], # Military Branch
-        rank_values[row[18]], # Military Rank
-        row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
-        row[22], # Date Available
-        education_values[row[23]], # Education Level
-        clearance_values[row[25]], # Clearance
-        row[27], # Resume
-      )
-
-      # Write a new file and pass the csv contents to it
-      new_file = File.open("#{opts[:destination]}/#{app.file_name}", "w")
-      new_file.write app.create_file_string
-      new_file.close
-
-      # Let the user know it worked
-    end
-
-    puts "#{Applicant.count} files successfully created"
+    write_files(opts[:source], opts[:destination])
   elsif continue == "n"
     puts "No files written. Exiting now..."
   else
