@@ -1,5 +1,12 @@
 require 'csv'
 require 'fileutils'
+require 'trollop'
+
+# CLI Interface
+opts = Trollop::options do
+  opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
+  opt :destination, "path/to/destination/folder", type: :string, default: "headers-2014-12-12"
+end
 
 # Hash to convert from string representation to integer representation for rank from the csv file
 rank_values = {
@@ -124,40 +131,48 @@ class Applicant
 
 end
 
-# Create a folder for the csv files to be zipped later
-target_dir = "headers-2014-12-12"
-FileUtils.mkdir target_dir
+begin
+  FileUtils.mkdir opts[:destination]
+rescue
+  puts "Folder #{opts[:destination]} already exists, continue? (y/n)"
+  continue = gets.chomp
+  if continue == "y"
 
-# Set source file
-source_file = "../corporate-gray-moaa-6-20141211-204645.csv"
-# Go throught every row of the csv file
-CSV.foreach(source_file) do |row|
+    # Go throught every row of the csv file
+    CSV.foreach(opts[:source]) do |row|
 
-  # Store every column value of a row in an Application instance
-  app = Applicant.new(
-    row[0], # First name
-    row[1], # Last name
-    row[2], # Email
-    row[11], # Street Address
-    row[12], # City
-    row[13], # State Province
-    row[14], # Zipcode
-    branch_values[row[17]], # Military Branch
-    rank_values[row[18]], # Military Rank
-    row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
-    row[22], # Date Available
-    education_values[row[23]], # Education Level
-    clearance_values[row[25]], # Clearance
-    row[27], # Resume
-  )
+      # Store every column value of a row in an Application instance
+      app = Applicant.new(
+        row[0], # First name
+        row[1], # Last name
+        row[2], # Email
+        row[11], # Street Address
+        row[12], # City
+        row[13], # State Province
+        row[14], # Zipcode
+        branch_values[row[17]], # Military Branch
+        rank_values[row[18]], # Military Rank
+        row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
+        row[22], # Date Available
+        education_values[row[23]], # Education Level
+        clearance_values[row[25]], # Clearance
+        row[27], # Resume
+      )
 
-  # Write a new file and pass the csv contents to it
-  new_file = File.open("#{target_dir}/#{app.file_name}", "w")
-  new_file.write app.create_file_string
-  new_file.close
+      # Write a new file and pass the csv contents to it
+      new_file = File.open("#{opts[:destination]}/#{app.file_name}", "w")
+      new_file.write app.create_file_string
+      new_file.close
+
+      # Let the user know it worked
+    end
+
+    puts "#{Applicant.count} files successfully created"
+  elsif continue == "n"
+    puts "No files written. Exiting now..."
+  else
+    puts "Invalid selection, terminating program..."
+  end
+ensure
+  puts "Done"
 end
-
-# Let the user know it worked
-puts "#{Applicant.count} files successfully created"
-
-
