@@ -1,7 +1,7 @@
 require 'csv'
 require 'fileutils'
 
-# Values for the strings from the csv file
+# Hash to convert from string representation to integer representation for rank from the csv file
 rank_values = {
   "E1" => 3,
   "E2" => 22,
@@ -30,6 +30,7 @@ rank_values = {
   "Civilian" => 37
 }
 
+# Hash to convert branch strings to branch integers
 branch_values = {
   nil => 0,
   "Unspecified" => 0,
@@ -48,6 +49,7 @@ branch_values = {
   "Other" => 14
 }
 
+# Hash to convert clearance strings to integers
 clearance_values = {
   nil => 0,
   "Unspecified" => 0,
@@ -56,6 +58,7 @@ clearance_values = {
   "None" => 3
 }
 
+# Hash to convert education strings to integers
 education_values = {
   nil => 0,
   "Unspecified" => 0,
@@ -117,20 +120,18 @@ class Applicant
   # Create the new csv format in the proper order
   def create_file_string
     "#{create_value(@first_name)}, #{create_value(@last_name)}, #{create_value(@street_address)}, #{create_value(@city)}, #{create_value(@state_province)}, \"\", #{create_value(@zipcode)}, \"\", #{create_value(@email)}, \"\", \"\", \"\", \"\", \"\", #{create_value(@mil_rank)}, #{create_value(@mil_branch)}, #{create_value(@clearance)}, #{create_value(@education_level)}, #{create_value(@relocate)}, #{create_value(@date_available)}"
-    # first_name, last_name, street_address, city, state_province, country, zip, phone, email, job objective, company, first_year, MISC, unknown, mil_rank (required, mil_branch(required), clearance (require), education (required), relocate (required), available (required)
   end
 
 end
 
-
-# Store all of the applicant objects
-applicant_array = []
-
 # Create a folder for the csv files to be zipped later
 target_dir = "headers-2014-12-12"
 FileUtils.mkdir target_dir
+
+# Set source file
+source_file = "../corporate-gray-moaa-6-20141211-204645.csv"
 # Go throught every row of the csv file
-CSV.foreach("../corporate-gray-moaa-6-20141211-204645.csv") do |row|
+CSV.foreach(source_file) do |row|
 
   # Store every column value of a row in an Application instance
   app = Applicant.new(
@@ -143,7 +144,7 @@ CSV.foreach("../corporate-gray-moaa-6-20141211-204645.csv") do |row|
     row[14], # Zipcode
     branch_values[row[17]], # Military Branch
     rank_values[row[18]], # Military Rank
-    row[21] ? row[21].downcase : "", # Willing to Relocate
+    row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
     row[22], # Date Available
     education_values[row[23]], # Education Level
     clearance_values[row[25]], # Clearance
@@ -156,6 +157,7 @@ CSV.foreach("../corporate-gray-moaa-6-20141211-204645.csv") do |row|
   new_file.close
 end
 
+# Let the user know it worked
 puts "#{Applicant.count} files successfully created"
 
 
