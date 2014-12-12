@@ -161,6 +161,7 @@ def write_files(source, destination)
   end
     puts "#{Applicant.count} files successfully created"
 end
+
 begin
   FileUtils.mkdir opts[:destination]
   write_files(opts[:source], opts[:destination])
