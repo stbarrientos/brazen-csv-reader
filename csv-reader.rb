@@ -5,7 +5,8 @@ require 'trollop'
 # CLI Interface
 opts = Trollop::options do
   opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
-  opt :destination, "path/to/destination/folder", type: :string, default: "headers-2014-12-12"
+  opt :csv_destination, "path/to/csv/destination/folder", type: :string, default: "headers-2014-12-12"
+  opt :resume_destination, "path/to/resume/destination/folder", type: :string, default: "resumes-2014-12-12"
 end
 
 
@@ -64,7 +65,49 @@ class Applicant
 
 end
 
-def write_files(source, destination)
+class Resume
+
+  @@count = 0
+
+  attr_reader :id, :url
+
+    def initialize(id, url)
+      @id = id
+      @url = url
+    end
+
+    def self.count
+      @@count
+    end
+
+    def file_ending
+      @url.split(".")[-1]
+    end
+
+    def write_zeros
+      zeros = 8 - (@id.to_s.length)
+    end
+
+    def file_name
+      if @url
+        file_name = "r"
+        write_zeros.times { file_name += "0" }
+        file_name += "#{@id.to_s}.#{file_ending}"
+      else
+        false
+      end
+    end
+
+    def write_file(resume_destination)
+      file = file_name
+      if file
+        system("curl -sS -o #{resume_destination}/#{file} #{@url}")
+        @@count += 1
+      end
+    end
+end
+
+def write_files(source, csv_destination, resume_destination)
   
   # Hash to convert from string representation to integer representation for rank from the csv file
   rank_values = {
@@ -134,6 +177,7 @@ def write_files(source, destination)
     "PhD" => 4
   }
   # Go throught every row of the csv file
+  print "\nFetching resumes and csv data"
   CSV.foreach(source) do |row|
 
     # Store every column value of a row in an Application instance
@@ -154,27 +198,91 @@ def write_files(source, destination)
       row[27], # Resume
     )
 
+    resume = Resume.new(
+      Applicant.count,
+      row[27]
+    )
+
     # Write a new file and pass the csv contents to it
-    new_file = File.open("#{destination}/#{app.file_name}", "w")
+    new_file = File.open("#{csv_destination}/#{app.file_name}", "w")
     new_file.write app.create_file_string
     new_file.close
+
+    # Write a new file for the resume
+    resume.write_file(resume_destination)
+
+    # Show progress to user
+    print "."
   end
-    puts "#{Applicant.count} files successfully created"
+    puts "#{Applicant.count} csv files and #{Resume.count} resume files successfully created"
 end
 
-begin
-  FileUtils.mkdir opts[:destination]
-  write_files(opts[:source], opts[:destination])
-rescue
-  puts "Folder #{opts[:destination]} already exists, continue? (y/n)"
-  continue = gets.chomp
-  if continue == "y"
-    write_files(opts[:source], opts[:destination])
-  elsif continue == "n"
-    puts "No files written. Exiting now..."
-  else
-    puts "Invalid selection, terminating program..."
+def prompt(source, csv_destination, resume_destination)
+  begin
+    # Attempt to create folder for csv files
+    FileUtils.mkdir csv_destination
+  rescue Errno::EEXIST
+    # Ask user weather to write into existing directory
+    puts "Folder #{csv_destination} already exists, write into existing folder? (y/n)"
+    continue = gets.chomp
+    case continue
+    when "y"
+      # Proceed to next step
+      puts "Proceeding..."
+    when "n"
+      # Exit program
+      return "Exiting program... No files written."
+    else 
+      # Exit program
+      return "Invalid input, exiting program..."
+    end
   end
-ensure
-  puts "Done"
+
+  begin
+    # Attempt to create folder for resumes
+    FileUtils.mkdir resume_destination
+  rescue Errno::EEXIST
+    # Ask user weather to write into existing folder
+    puts "Folder #{resume_destination} already exists. Write into existing file? (y/n)"
+    continue = gets.chomp
+    case continue
+    when "y"
+      # COntinue
+      puts "Proceeding..."
+    when "n"
+      # Delete csv_folder so no trash is left behind and exit program
+      FileUtils.remove_dir csv_destination
+      return "Exiting program, deleting progress..."
+    else
+      # Delete created folders and exit program
+      FileUtils.remove_dir csv_destination
+      return "Invalid input, exiting program, deleting progress..."
+    end
+  end
+  
+  begin
+    write_files(source, csv_destination, resume_destination)
+  rescue
+    return "Something went wrong writing files, deleting progress..."
+  end
+
+  begin
+    puts "Zipping up #{csv_destination}..."
+    system("zip -qr #{csv_destination}.zip #{csv_destination}")
+  rescue
+    puts "Unable to zip #{csv_destination}. Folder intact, manual zipping required"
+  end
+
+  begin
+    puts "Zipping up #{resume_destination}..."
+    system("zip -qr #{resume_destination}.zip #{resume_destination}")
+  rescue
+    puts "Unable to zip #{resume_destination}. Folder intact, manual zipping required"
+  end
+
+  return "Done"
+
 end
+
+puts prompt(opts[:source], opts[:csv_destination], opts[:resume_destination])
+
