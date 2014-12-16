@@ -5,8 +5,8 @@ require 'trollop'
 # CLI Interface
 opts = Trollop::options do
   opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
-  opt :csv_destination, "path/to/csv/destination/folder", type: :string, default: "headers-2014-12-12"
-  opt :resume_destination, "path/to/resume/destination/folder", type: :string, default: "resumes-2014-12-12"
+  opt :CSVs, "path/to/csv/destination/folder", type: :string, default: "headers-2014-12-12"
+  opt :resumes, "path/to/resume/destination/folder", type: :string, default: "resumes-2014-12-12"
 end
 
 
@@ -177,44 +177,50 @@ def write_files(source, csv_destination, resume_destination)
     "PhD" => 4
   }
   # Go throught every row of the csv file
-  print "\nFetching resumes and csv data"
-  CSV.foreach(source) do |row|
+  puts "Fetching resumes and csv data..."
+  begin
+    # Try to read the source file
+    CSV.foreach(source) do |row|
 
-    # Store every column value of a row in an Application instance
-    app = Applicant.new(
-      row[0], # First name
-      row[1], # Last name
-      row[2], # Email
-      row[11], # Street Address
-      row[12], # City
-      row[13], # State Province
-      row[14], # Zipcode
-      branch_values[row[17]], # Military Branch
-      rank_values[row[18]], # Military Rank
-      row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
-      row[22], # Date Available
-      education_values[row[23]], # Education Level
-      clearance_values[row[25]], # Clearance
-      row[27], # Resume
-    )
+      # Store every column value of a row in an Application instance
+      app = Applicant.new(
+        row[0], # First name
+        row[1], # Last name
+        row[2], # Email
+        row[11], # Street Address
+        row[12], # City
+        row[13], # State Province
+        row[14], # Zipcode
+        branch_values[row[17]], # Military Branch
+        rank_values[row[18]], # Military Rank
+        row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
+        row[22], # Date Available
+        education_values[row[23]], # Education Level
+        clearance_values[row[25]], # Clearance
+        row[27], # Resume
+      )
 
-    resume = Resume.new(
-      Applicant.count,
-      row[27]
-    )
+      resume = Resume.new(
+        Applicant.count,
+        row[27]
+      )
 
-    # Write a new file and pass the csv contents to it
-    new_file = File.open("#{csv_destination}/#{app.file_name}", "w")
-    new_file.write app.create_file_string
-    new_file.close
+      # Write a new file and pass the csv contents to it
+      new_file = File.open("#{csv_destination}/#{app.file_name}", "w")
+      new_file.write app.create_file_string
+      new_file.close
 
-    # Write a new file for the resume
-    resume.write_file(resume_destination)
+      # Write a new file for the resume
+      resume.write_file(resume_destination)
 
-    # Show progress to user
-    print "."
+      # Show progress to user
+      print "."
+    end
+      puts "\n#{Applicant.count} csv files and #{Resume.count} resume files successfully created"
+
+  rescue Errno::ENOENT
+    return false 
   end
-    puts "#{Applicant.count} csv files and #{Resume.count} resume files successfully created"
 end
 
 def prompt(source, csv_destination, resume_destination)
@@ -247,7 +253,7 @@ def prompt(source, csv_destination, resume_destination)
     continue = gets.chomp
     case continue
     when "y"
-      # COntinue
+      # Continue
       puts "Proceeding..."
     when "n"
       # Delete csv_folder so no trash is left behind and exit program
@@ -261,28 +267,53 @@ def prompt(source, csv_destination, resume_destination)
   end
   
   begin
-    write_files(source, csv_destination, resume_destination)
+    # Call write files method
+    worked = write_files(source, csv_destination, resume_destination)
+    unless worked
+      FileUtils.remove_dir csv_destination
+      FileUtils.remove_dir resume_destination
+      return "#{source} not found. Ending program."
+    end
   rescue
+    # End program and delete progress if something goes wrong
+    FileUtils.remove_dir csv_destination
+    FileUtils.remove_dir resume_destination
     return "Something went wrong writing files, deleting progress..."
   end
 
+  # Variables to determine weather unzipped folders should be deleted
+  delete_csv_folder = true
+  delete_resumes_folder = true
+
   begin
+    # Zip up the csv destination folder
     puts "Zipping up #{csv_destination}..."
     system("zip -qr #{csv_destination}.zip #{csv_destination}")
   rescue
+    # Leave folder for user to zip up later, move to next folder
+    delete_csv_folder = false
     puts "Unable to zip #{csv_destination}. Folder intact, manual zipping required"
   end
 
   begin
+    # Attempt to zip up resume destination folder
     puts "Zipping up #{resume_destination}..."
     system("zip -qr #{resume_destination}.zip #{resume_destination}")
   rescue
+    # Leave original folder intact for user to manually zip later
+    delete_resumes_folder = false
     puts "Unable to zip #{resume_destination}. Folder intact, manual zipping required"
   end
 
+  # Delete unzipped folders if necessary
+  FileUtils.remove_dir csv_destination if delete_csv_folder
+  FileUtils.remove_dir resume_destination if delete_resumes_folder
+
+  # Tell user the program finished
   return "Done"
 
 end
 
-puts prompt(opts[:source], opts[:csv_destination], opts[:resume_destination])
+# Call prompt method to start program
+puts prompt(opts[:source], opts[:CSVs], opts[:resumes])
 
