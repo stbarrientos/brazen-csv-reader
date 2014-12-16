@@ -2,4 +2,4 @@
 
 ## Usage  
 
-`ruby csv-reader.rb --source <source file> --CSVs <csv files destination> --resumes <resume files destination>`  
+`ruby csv-reader.rb --source <source file> --destination <destination for zip file`
