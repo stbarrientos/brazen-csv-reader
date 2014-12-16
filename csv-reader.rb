@@ -251,10 +251,13 @@ def prompt(source, destination)
 
   # Staging area in tmp directory
   staging_area = "#{ENV['TMPDIR']}csv-reader/#{UUIDTools::UUID.timestamp_create}"
+  pwd = Dir.pwd
 
   # Create folders in staging areas to be zipped
   resumes_folder = "#{staging_area}/resumes-#{date_string}"
   headers_folder = "#{staging_area}/headers-#{date_string}"
+  resumes_string = "resumes-#{date_string}"
+  headers_string = "headers-#{date_string}"
   FileUtils.mkdir_p resumes_folder
   FileUtils.mkdir_p headers_folder
   
@@ -279,7 +282,7 @@ def prompt(source, destination)
   begin
     # Zip up the headers folder
     puts "Zipping up #{headers_folder}..."
-    system("zip -qr #{headers_folder}.zip #{headers_folder}")
+    system("cd #{staging_area}; zip -qr #{headers_string}.zip #{headers_string}")
   rescue
     # Leave folder for user to zip up later, move to next folder
     puts "Unable to zip #{headers_folder}. Folder intact, manual zipping required."
@@ -288,7 +291,7 @@ def prompt(source, destination)
   begin
     # Attempt to zip up resumes folder
     puts "Zipping up #{resumes_folder}..."
-    system("zip -qr #{resumes_folder}.zip #{resumes_folder}")
+    system("cd #{staging_area}; zip -qr #{resumes_string}.zip #{resumes_string}")
   rescue
     # Leave original folder intact for user to manually zip later
     puts "Unable to zip #{resumes_folder}. Folder intact, manual zipping required"
@@ -297,6 +300,7 @@ def prompt(source, destination)
   begin
     # Copy zip files from stagin area to destination
     puts "Bringing zip files from #{staging_area} to #{destination}"
+    system("cd #{pwd}")
     system("cp #{resumes_folder}.zip #{destination}")
     system("cp #{headers_folder}.zip #{destination}")
   rescue
