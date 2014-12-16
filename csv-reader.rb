@@ -1,7 +1,7 @@
 require 'csv'
 require 'fileutils'
 require 'trollop'
-require 'uuid'
+require 'uuidtools'
 
 
 # CLI Interface
@@ -250,11 +250,13 @@ def prompt(source, destination)
   date_string = "#{Time.now}"[0..9]
 
   # Staging area in tmp directory
-  staging_area = "#{ENV['TMPDIR']}/csv-reader/#{UUIDTools::UUID.timestamp_create}"
+  staging_area = "#{ENV['TMPDIR']}csv-reader/#{UUIDTools::UUID.timestamp_create}"
 
   # Create folders in staging areas to be zipped
   resumes_folder = "#{staging_area}/resumes-#{date_string}"
   headers_folder = "#{staging_area}/headers-#{date_string}"
+  FileUtils.mkdir_p resumes_folder
+  FileUtils.mkdir_p headers_folder
   
   begin
     # Call write files method
@@ -262,15 +264,15 @@ def prompt(source, destination)
 
     # If source file is not found, report to user
     unless worked
-      FileUtils.remove_dir csv_destination
-      FileUtils.remove_dir resume_destination
+      FileUtils.remove_dir headers_folder
+      FileUtils.remove_dir resumes_folder
       return "#{source} not found. Ending program."
     end
 
   rescue
     # End program and delete progress if something goes wrong
-    FileUtils.remove_dir csv_destination
-    FileUtils.remove_dir resume_destination
+    FileUtils.remove_dir headers_folder
+    FileUtils.remove_dir resumes_folder
     return "Something went wrong writing files, deleting progress..."
   end
 
@@ -289,7 +291,16 @@ def prompt(source, destination)
     system("zip -qr #{resumes_folder}.zip #{resumes_folder}")
   rescue
     # Leave original folder intact for user to manually zip later
-    puts "Unable to zip #{resume_destination}. Folder intact, manual zipping required"
+    puts "Unable to zip #{resumes_folder}. Folder intact, manual zipping required"
+  end
+  
+  begin
+    # Copy zip files from stagin area to destination
+    puts "Bringing zip files from #{staging_area} to #{destination}"
+    system("cp #{resumes_folder}.zip #{destination}")
+    system("cp #{headers_folder}.zip #{destination}")
+  rescue
+    return "Unable to copy zipped filed to #{destination}. They are located here: #{staging_area}"
   end
 
   # Tell user the program finished
