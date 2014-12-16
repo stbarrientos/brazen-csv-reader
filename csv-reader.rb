@@ -1,15 +1,13 @@
 require 'csv'
 require 'fileutils'
 require 'trollop'
+require 'uuid'
 
-# Date default file endings
-date_string = "#{Time.now}"[0..9]
 
 # CLI Interface
 opts = Trollop::options do
   opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
-  opt :CSVs, "path/to/csv/destination/folder", type: :string, default: "headers-#{date_string}"
-  opt :resumes, "path/to/resume/destination/folder", type: :string, default: "resumes-#{date_string}"
+  opt :destination, "path/to/csv/destination/folder", type: :string, default: "./"
 end
 
 
@@ -110,7 +108,7 @@ class Resume
     end
 end
 
-def write_files(source, csv_destination, resume_destination)
+def write_files(source, header_destination, resume_destination)
   
   # Hash to convert from string representation to integer representation for rank from the csv file
   rank_values = {
@@ -209,7 +207,7 @@ def write_files(source, csv_destination, resume_destination)
       )
 
       # Write a new file and pass the csv contents to it
-      new_file = File.open("#{csv_destination}/#{app.file_name}", "w")
+      new_file = File.open("#{header_destination}/#{app.file_name}", "w")
       new_file.write app.create_file_string
       new_file.close
 
@@ -227,57 +225,48 @@ def write_files(source, csv_destination, resume_destination)
   end
 end
 
-def prompt(source, csv_destination, resume_destination)
-  begin
-    # Attempt to create folder for csv files
-    FileUtils.mkdir csv_destination
-  rescue Errno::EEXIST
-    # Ask user weather to write into existing directory
-    puts "Folder #{csv_destination} already exists, write into existing folder? (y/n)"
+def prompt(source, destination)
+
+  # Make sure the destination folder exists
+  unless system("ls #{destination}")
+
+    # If the destination doesn't exist, ask the user to create it
+    puts "Folder #{destination} does not exist, create #{destination}? (y/n)"
     continue = gets.chomp
     case continue
     when "y"
-      # Proceed to next step
-      puts "Proceeding..."
+      # Create the destination folder if the user wants to
+      FileUtils.mkdir destination
     when "n"
-      # Exit program
-      return "Exiting program... No files written."
-    else 
-      # Exit program
-      return "Invalid input, exiting program..."
+      # Terminate the program if users decides not to create destination
+      return "Folder not created. No files written. Exiting..."
+    else
+      # If user enters invalid choice, don't guess. Just terminat the program
+      return "Invalid selection. No files written. Exiting..."
     end
   end
 
-  begin
-    # Attempt to create folder for resumes
-    FileUtils.mkdir resume_destination
-  rescue Errno::EEXIST
-    # Ask user weather to write into existing folder
-    puts "Folder #{resume_destination} already exists. Write into existing file? (y/n)"
-    continue = gets.chomp
-    case continue
-    when "y"
-      # Continue
-      puts "Proceeding..."
-    when "n"
-      # Delete csv_folder so no trash is left behind and exit program
-      FileUtils.remove_dir csv_destination
-      return "Exiting program, deleting progress..."
-    else
-      # Delete created folders and exit program
-      FileUtils.remove_dir csv_destination
-      return "Invalid input, exiting program, deleting progress..."
-    end
-  end
+  # Date default file endings
+  date_string = "#{Time.now}"[0..9]
+
+  # Staging area in tmp directory
+  staging_area = "#{ENV['TMPDIR']}/csv-reader/#{UUIDTools::UUID.timestamp_create}"
+
+  # Create folders in staging areas to be zipped
+  resumes_folder = "#{staging_area}/resumes-#{date_string}"
+  headers_folder = "#{staging_area}/headers-#{date_string}"
   
   begin
     # Call write files method
-    worked = write_files(source, csv_destination, resume_destination)
+    worked = write_files(source, headers_folder, resumes_folder)
+
+    # If source file is not found, report to user
     unless worked
       FileUtils.remove_dir csv_destination
       FileUtils.remove_dir resume_destination
       return "#{source} not found. Ending program."
     end
+
   rescue
     # End program and delete progress if something goes wrong
     FileUtils.remove_dir csv_destination
@@ -285,33 +274,23 @@ def prompt(source, csv_destination, resume_destination)
     return "Something went wrong writing files, deleting progress..."
   end
 
-  # Variables to determine weather unzipped folders should be deleted
-  delete_csv_folder = true
-  delete_resumes_folder = true
-
   begin
-    # Zip up the csv destination folder
-    puts "Zipping up #{csv_destination}..."
-    system("zip -qr #{csv_destination}.zip #{csv_destination}")
+    # Zip up the headers folder
+    puts "Zipping up #{headers_folder}..."
+    system("zip -qr #{headers_folder}.zip #{headers_folder}")
   rescue
     # Leave folder for user to zip up later, move to next folder
-    delete_csv_folder = false
-    puts "Unable to zip #{csv_destination}. Folder intact, manual zipping required"
+    puts "Unable to zip #{headers_folder}. Folder intact, manual zipping required."
   end
 
   begin
-    # Attempt to zip up resume destination folder
-    puts "Zipping up #{resume_destination}..."
-    system("zip -qr #{resume_destination}.zip #{resume_destination}")
+    # Attempt to zip up resumes folder
+    puts "Zipping up #{resumes_folder}..."
+    system("zip -qr #{resumes_folder}.zip #{resumes_folder}")
   rescue
     # Leave original folder intact for user to manually zip later
-    delete_resumes_folder = false
     puts "Unable to zip #{resume_destination}. Folder intact, manual zipping required"
   end
-
-  # Delete unzipped folders if necessary
-  FileUtils.remove_dir csv_destination if delete_csv_folder
-  FileUtils.remove_dir resume_destination if delete_resumes_folder
 
   # Tell user the program finished
   return "Done"
@@ -319,5 +298,5 @@ def prompt(source, csv_destination, resume_destination)
 end
 
 # Call prompt method to start program
-puts prompt(opts[:source], opts[:CSVs], opts[:resumes])
+puts prompt(opts[:source], opts[:destination])
 
