@@ -2,11 +2,14 @@ require 'csv'
 require 'fileutils'
 require 'trollop'
 
+# Date default file endings
+date_string = "#{Time.now}"[0..9]
+
 # CLI Interface
 opts = Trollop::options do
   opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
-  opt :CSVs, "path/to/csv/destination/folder", type: :string, default: "headers-2014-12-12"
-  opt :resumes, "path/to/resume/destination/folder", type: :string, default: "resumes-2014-12-12"
+  opt :CSVs, "path/to/csv/destination/folder", type: :string, default: "headers-#{date_string}"
+  opt :resumes, "path/to/resume/destination/folder", type: :string, default: "resumes-#{date_string}"
 end
 
 
@@ -217,6 +220,7 @@ def write_files(source, csv_destination, resume_destination)
       print "."
     end
       puts "\n#{Applicant.count} csv files and #{Resume.count} resume files successfully created"
+    return true
 
   rescue Errno::ENOENT
     return false 
