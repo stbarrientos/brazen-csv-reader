@@ -228,7 +228,7 @@ end
 def prompt(source, destination)
 
   # Make sure the destination folder exists
-  unless system("ls #{destination}")
+  unless system("ls #{destination} >&/dev/null")
 
     # If the destination doesn't exist, ask the user to create it
     puts "Folder #{destination} does not exist, create #{destination}? (y/n)"
