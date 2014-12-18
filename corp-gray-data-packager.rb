@@ -1,15 +1,57 @@
+# co
 require 'csv'
 require 'fileutils'
 require 'trollop'
 require 'uuidtools'
 
-
 # CLI Interface
 opts = Trollop::options do
-  opt :source, "path/to/csv/file", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
-  opt :destination, "path/to/csv/destination/folder", type: :string, default: "./"
+  banner <<-EOS
+Usage:
+  #{File.basename($PROGRAM_NAME).gsub("\.rb", "")} [options]
+  Packages event participant data into header and resume zip archives
+  for Corporate Gray.
+
+  Options:
+  EOS
+  opt :source, "path of the event participant CSV file to read", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
+  opt :destination, "where the zip files are to be output", type: :string, default: "./"
+  opt :date, "the date to use in file and folder names", type: :string
+  opt :debug, "turn debugging on", type: :boolean
 end
 
+debug = false
+
+# Can be used to output a spinning pinwheel to 
+# indicate program is processing
+class Spinner
+  @count
+
+  def initialize()
+    @count = 0
+  end
+
+  def nextFrame()
+    @count += 1
+    step = @count % 8
+
+    if step == 1 || step == 5
+      return "|"
+    elsif step == 2 || step == 6
+      return "/"
+    elsif step == 3 || step == 7
+      return "-"
+    else
+      return "\\"
+    end
+  end
+
+  def animateOnce()
+    frame = nextFrame() + "\r"
+    print frame
+    $stdout.flush
+  end
+end
 
 # Object to store all of the information for each applicant
 class Applicant
@@ -101,7 +143,7 @@ class Resume
 
     def write_file(resume_destination)
       file = file_name
-      if file
+      if file && !@url.nil?
         system("curl -sS -o #{resume_destination}/#{file} #{@url}")
         @@count += 1
       end
@@ -178,44 +220,51 @@ def write_files(source, header_destination, resume_destination)
     "PhD" => 4
   }
   # Go throught every row of the csv file
-  puts "Fetching resumes and csv data..."
+  puts "Processing participant data in CSV and fetching resumes..."
+
   begin
+    rowCount = 0
+    spinner = Spinner.new
+
     # Try to read the source file
     CSV.foreach(source) do |row|
+      spinner.animateOnce()
 
-      # Store every column value of a row in an Application instance
-      app = Applicant.new(
-        row[0], # First name
-        row[1], # Last name
-        row[2], # Email
-        row[11], # Street Address
-        row[12], # City
-        row[13], # State Province
-        row[14], # Zipcode
-        branch_values[row[17]], # Military Branch
-        rank_values[row[18]], # Military Rank
-        row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
-        row[22], # Date Available
-        education_values[row[23]], # Education Level
-        clearance_values[row[25]], # Clearance
-        row[27], # Resume
-      )
+      # Skip header row      
+      if rowCount > 0
+        # Store every column value of a row in an Application instance
+        app = Applicant.new(
+          row[0], # First name
+          row[1], # Last name
+          row[2], # Email
+          row[11], # Street Address
+          row[12], # City
+          row[13], # State Province
+          row[14], # Zipcode
+          branch_values[row[17]], # Military Branch
+          rank_values[row[18]], # Military Rank
+          row[21] ? row[21].downcase : "", # Willing to Relocate, downcased
+          row[22], # Date Available
+          education_values[row[23]], # Education Level
+          clearance_values[row[25]], # Clearance
+          row[27], # Resume
+        )
 
-      resume = Resume.new(
-        Applicant.count,
-        row[27]
-      )
+        resume = Resume.new(
+          Applicant.count,
+          row[27]
+        )
 
-      # Write a new file and pass the csv contents to it
-      new_file = File.open("#{header_destination}/#{app.file_name}", "w")
-      new_file.write app.create_file_string
-      new_file.close
+        # Write a new file and pass the csv contents to it
+        new_file = File.open("#{header_destination}/#{app.file_name}", "w")
+        new_file.write app.create_file_string
+        new_file.close
 
-      # Write a new file for the resume
-      resume.write_file(resume_destination)
+        # Write a new file for the resume
+        resume.write_file(resume_destination)
+      end
 
-      # Show progress to user
-      print "."
+      rowCount += 1
     end
       puts "\n#{Applicant.count} csv files and #{Resume.count} resume files successfully created"
     return true
@@ -225,7 +274,7 @@ def write_files(source, header_destination, resume_destination)
   end
 end
 
-def prompt(source, destination)
+def prompt(source, destination, date, debug = false)
 
   # Make sure the destination folder exists
   unless system("ls #{destination} >&/dev/null")
@@ -246,18 +295,16 @@ def prompt(source, destination)
     end
   end
 
-  # Date default file endings
-  date_string = "#{Time.now}"[0..9]
-
   # Staging area in tmp directory
   staging_area = "#{ENV['TMPDIR']}csv-reader/#{UUIDTools::UUID.timestamp_create}"
+  puts "Using temp directory: #{staging_area}" if debug
   pwd = Dir.pwd
 
   # Create folders in staging areas to be zipped
-  resumes_folder = "#{staging_area}/resumes-#{date_string}"
-  headers_folder = "#{staging_area}/headers-#{date_string}"
-  resumes_string = "resumes-#{date_string}"
-  headers_string = "headers-#{date_string}"
+  resumes_folder = "#{staging_area}/resumes-#{date}"
+  headers_folder = "#{staging_area}/headers-#{date}"
+  resumes_string = "resumes-#{date}"
+  headers_string = "headers-#{date}"
   FileUtils.mkdir_p resumes_folder
   FileUtils.mkdir_p headers_folder
   
@@ -281,7 +328,11 @@ def prompt(source, destination)
 
   begin
     # Zip up the headers folder
-    puts "Zipping up #{headers_folder}..."
+    if debug
+      puts "Zipping up #{headers_folder}..."
+    else
+      puts "Zipping up header files..."
+    end
     system("cd #{staging_area}; zip -qr #{headers_string}.zip #{headers_string}")
   rescue
     # Leave folder for user to zip up later, move to next folder
@@ -290,7 +341,11 @@ def prompt(source, destination)
 
   begin
     # Attempt to zip up resumes folder
-    puts "Zipping up #{resumes_folder}..."
+    if debug
+      puts "Zipping up #{resumes_folder}..."
+    else
+      puts "Zipping up resumes..."
+    end
     system("cd #{staging_area}; zip -qr #{resumes_string}.zip #{resumes_string}")
   rescue
     # Leave original folder intact for user to manually zip later
@@ -299,7 +354,7 @@ def prompt(source, destination)
   
   begin
     # Copy zip files from stagin area to destination
-    puts "Bringing zip files from #{staging_area} to #{destination}"
+    puts "Bringing zip files from #{staging_area} to #{destination}" if debug
     system("cd #{pwd}")
     system("cp #{resumes_folder}.zip #{destination}")
     system("cp #{headers_folder}.zip #{destination}")
@@ -312,6 +367,11 @@ def prompt(source, destination)
 
 end
 
+Trollop::die('date is required') if opts[:date] == nil || opts[:date].empty?
+Trollop::die('date does not match pattern: YYYY-MM-DD') if opts[:date] !~ /^[0-9]{4,}\-[0-9]{2,}\-[0-9]{2,}$/
+
+debug = opts[:debug]
+
 # Call prompt method to start program
-puts prompt(opts[:source], opts[:destination])
+puts prompt(opts[:source], opts[:destination], opts[:date], debug)
 
