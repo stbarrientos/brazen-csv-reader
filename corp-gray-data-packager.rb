@@ -17,7 +17,8 @@ Usage:
   opt :source, "path of the event participant CSV file to read", type: :string, default:  "../corporate-gray-moaa-6-20141211-204645.csv"
   opt :destination, "where the zip files are to be output", type: :string, default: "./"
   opt :date, "the date to use in file and folder names", type: :string
-  opt :debug, "turn debugging on", type: :boolean
+  opt :debug, "turn debugging on"
+  opt :noResumes, "do not download resumes"
 end
 
 debug = false
@@ -101,11 +102,41 @@ class Applicant
     val ? "\"#{val}\"" : ""
   end
 
-  # Create the new csv format in the proper order
-  def create_file_string
-    "#{create_value(@first_name)}, #{create_value(@last_name)}, #{create_value(@street_address)}, #{create_value(@city)}, #{create_value(@state_province)}, \"US\", #{create_value(@zipcode)}, \"\", #{create_value(@email)}, \"\", \"\", \"\", \"\", \"\", #{create_value(@mil_rank)}, #{create_value(@mil_branch)}, #{create_value(@clearance)}, #{create_value(@education_level)}, #{create_value(@relocate)}, #{create_value(@date_available)}"
-  end
+  # Output the applicant data to a CSV row per the Corporate Gray specification
+  # performing any necessary data transformations.
+  # @return [String] the participant data formatted as CSV values.
+  def to_csv
+    relocateVal = "no"
+    relocateVal = @relocate.downcase() if !@relocate.nil?
 
+    availableDate = nil
+    availableDate = @date_available if @date_available =~ /^[0-9]{2,}\/[0-9]{2,}\/[0-9]{4,}$/
+
+    return CSV.generate({:force_quotes => true}) do | csv |
+      csv << [
+        @first_name,
+        @last_name,
+        @street_address,
+        @city,
+        @state_province,
+        "US",
+        @zipcode,
+        "",
+        @email,
+        "",
+        "",
+        "",
+        "",
+        "",
+        @mil_rank,
+        @mil_branch,
+        @clearance,
+        @education_level,
+        relocateVal,
+        availableDate
+      ]
+    end
+  end
 end
 
 class Resume
@@ -150,7 +181,7 @@ class Resume
     end
 end
 
-def write_files(source, header_destination, resume_destination)
+def write_files(source, header_destination, resume_destination, noResumes)
   
   # Hash to convert from string representation to integer representation for rank from the csv file
   rank_values = {
@@ -257,11 +288,11 @@ def write_files(source, header_destination, resume_destination)
 
         # Write a new file and pass the csv contents to it
         new_file = File.open("#{header_destination}/#{app.file_name}", "w")
-        new_file.write app.create_file_string
+        new_file.write app.to_csv
         new_file.close
 
         # Write a new file for the resume
-        resume.write_file(resume_destination)
+        resume.write_file(resume_destination) unless noResumes
       end
 
       rowCount += 1
@@ -274,7 +305,7 @@ def write_files(source, header_destination, resume_destination)
   end
 end
 
-def prompt(source, destination, date, debug = false)
+def prompt(source, destination, date, debug = false, noResumes = false)
 
   # Make sure the destination folder exists
   unless system("ls #{destination} >&/dev/null")
@@ -310,7 +341,7 @@ def prompt(source, destination, date, debug = false)
   
   begin
     # Call write files method
-    worked = write_files(source, headers_folder, resumes_folder)
+    worked = write_files(source, headers_folder, resumes_folder, noResumes)
 
     # If source file is not found, report to user
     unless worked
@@ -323,7 +354,8 @@ def prompt(source, destination, date, debug = false)
     # End program and delete progress if something goes wrong
     FileUtils.remove_dir headers_folder
     FileUtils.remove_dir resumes_folder
-    return "Something went wrong writing files, deleting progress..."
+    puts "Something went wrong writing files, deleting progress..."
+    raise
   end
 
   begin
@@ -371,7 +403,8 @@ Trollop::die('date is required') if opts[:date] == nil || opts[:date].empty?
 Trollop::die('date does not match pattern: YYYY-MM-DD') if opts[:date] !~ /^[0-9]{4,}\-[0-9]{2,}\-[0-9]{2,}$/
 
 debug = opts[:debug]
+noResumes = opts[:noResumes]
 
 # Call prompt method to start program
-puts prompt(opts[:source], opts[:destination], opts[:date], debug)
+puts prompt(opts[:source], opts[:destination], opts[:date], debug, noResumes)
 
